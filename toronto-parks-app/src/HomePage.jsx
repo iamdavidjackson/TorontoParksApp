@@ -8,6 +8,7 @@ import {
   Marker,
   InfoWindow
 } from 'react-google-maps';
+import firebase from 'firebase';
 
 const GettingStartedGoogleMap = withGoogleMap(props => (
   <GoogleMap
@@ -26,6 +27,7 @@ export default class HomePage extends React.Component {
     this.state = {
       message: "We're trying to locate where you are located",
     };
+    this.geocoder = new google.maps.Geocoder();
   }
 
   componentWillMount() {
@@ -44,9 +46,37 @@ export default class HomePage extends React.Component {
     }
   }
 
-  _renderMap() {
-    const { location } = this.state;
+  componentDidMount() {
+    const firebaseRef = firebase.database().ref('Locations');
 
+    firebaseRef.on('value', snapshot => {
+      const locationsData = snapshot.val();
+      const locations = [];
+      console.log(locationsData);
+      const locationsPromises = locationsData.Location.map(location => {
+        return new Promise((resolve) => {
+          this.geocoder.geocode({'address': location.Address}, function(results, status) {
+            if (status === 'OK') {
+              locations.push({
+                position: results[0].geometry.location
+              });
+            } else {
+              console.log('Geocode was not successful for the following reason: ' + status);
+            }
+            resolve();
+          });
+        });
+      });
+      Promise.all(locationsPromises).then(() => {
+        this.setState({locations});
+      })
+      console.log(locations);
+    });
+  }
+
+  _renderMap() {
+    const { location, locations } = this.state;
+    
     return (
       <div id="google-map" style={{height:'100%', width:'100%'}}>
         <GettingStartedGoogleMap
@@ -58,6 +88,7 @@ export default class HomePage extends React.Component {
           }
           defaultCenter={location}
           defaultZoom={6}
+          markers={locations}
           onMapLoad={(map) => {
             this._map = map;
             return map;
